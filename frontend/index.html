@@ -1,0 +1,167 @@
+<!-- To run code 
+ D:
+ PS D:\final yr\visual studio python> cd "D:\final yr\visual studio python\text_extraction_from_image\backend"
+PS D:\final yr\visual studio python\text_extraction_from_image\backend> python app.py
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Image to Text Extractor</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; }
+    body {
+      background: linear-gradient(135deg,#e8f5e9,#f4f6f9);
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background:#fff; width:100%; max-width:520px; border-radius:12px;
+      padding:24px; box-shadow:0 6px 20px rgba(0,0,0,0.12); text-align:center;
+    }
+    h2 { color:#2e7d32; margin-bottom:14px; }
+    .drop {
+      border:2px dashed #4CAF50; border-radius:10px; padding:20px; cursor:pointer;
+      background:#fafafa; transition:background .18s, border-color .18s;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      min-height:150px;
+    }
+    .drop.hover { background:#e8f5e9; border-color:#388e3c; }
+    .drop p { color:#444; margin-bottom:6px; }
+    .preview {
+      margin-top:10px; display:flex; flex-direction:column; align-items:center; gap:6px;
+    }
+    .preview img {
+      max-width:120px; max-height:120px; border-radius:8px; border:1px solid #ddd; object-fit:cover;
+    }
+    input[type="file"]{ display:none; }
+    .controls { margin-top:14px; display:flex; justify-content:center; gap:10px; flex-wrap:wrap; }
+    .btn {
+      padding:10px 16px; border-radius:8px; border:none; font-weight:600; cursor:pointer;
+      background:#4CAF50; color:#fff; transition:transform .12s, background .12s; min-width:120px;
+    }
+    .btn:hover { transform:translateY(-2px); background:#388e3c; }
+    .btn[disabled] { opacity:0.6; cursor:not-allowed; transform:none; }
+    #resultBox {
+      margin-top:18px; text-align:left; background:#f9f9f9; padding:14px; border-radius:8px;
+      min-height:110px; max-height:240px; overflow:auto; white-space:pre-wrap; word-wrap:break-word;
+      border:1px solid rgba(0,0,0,0.04);
+    }
+    .meta { margin-top:10px; color:#555; font-size:13px; }
+    .small { font-size:13px; color:#666; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>📄 Image to Text Extractor</h2>
+
+    <div id="dropArea" class="drop" tabindex="0" aria-label="Drop image here or click to upload">
+      <p id="dropText"><strong>Drag & Drop</strong> an image here</p>
+      <p class="small">or <span style="color:#4CAF50;font-weight:700; cursor:pointer;">click to choose</span></p>
+      <div class="preview" id="preview" style="display:none;">
+        <img id="previewImg" src="" alt="Preview">
+        <span id="fileName" class="small"></span>
+      </div>
+    </div>
+    <input id="fileInput" type="file" accept="image/*">
+
+    <div class="controls">
+      <button id="extractBtn" class="btn">Extract Text</button>
+      <button id="downloadBtn" class="btn" style="background:#1976d2; display:none;">Download Text</button>
+      <button id="copyBtn" class="btn" style="background:#6a1b9a; display:none;">Copy Text</button>
+    </div>
+
+    <div class="meta" id="status"></div>
+    <div id="resultBox" style="display:none;"></div>
+  </div>
+
+  <script>
+    const dropArea = document.getElementById('dropArea');
+    const fileInput = document.getElementById('fileInput');
+    const dropText = document.getElementById('dropText');
+    const extractBtn = document.getElementById('extractBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const copyBtn = document.getElementById('copyBtn');
+    const resultBox = document.getElementById('resultBox');
+    const status = document.getElementById('status');
+    const preview = document.getElementById('preview');
+    const previewImg = document.getElementById('previewImg');
+    const fileName = document.getElementById('fileName');
+
+    let selectedFile = null;
+    let extractedText = '';
+
+    function onFileChosen(file) {
+      selectedFile = file;
+      extractedText = '';
+      resultBox.style.display = 'none';
+      downloadBtn.style.display = 'none';
+      copyBtn.style.display = 'none';
+
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = e => {
+          previewImg.src = e.target.result;
+          preview.style.display = 'flex';
+          fileName.textContent = file.name;
+        };
+        reader.readAsDataURL(file);
+        status.textContent = `Selected: ${file.name}`;
+      }
+    }
+
+    dropArea.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', e => {
+      const file = e.target.files && e.target.files[0];
+      if (file) onFileChosen(file);
+    });
+    dropArea.addEventListener('dragover', e => { e.preventDefault(); dropArea.classList.add('hover'); });
+    dropArea.addEventListener('dragleave', e => { e.preventDefault(); dropArea.classList.remove('hover'); });
+    dropArea.addEventListener('drop', e => {
+      e.preventDefault(); dropArea.classList.remove('hover');
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) onFileChosen(f);
+    });
+
+    extractBtn.addEventListener('click', async () => {
+      if (!selectedFile) { alert('Please select or drop an image first.'); return; }
+      extractBtn.disabled = true;
+      status.textContent = '⏳ Extracting text...';
+      try {
+        const form = new FormData();
+        form.append('image', selectedFile);
+        const resp = await fetch('http://127.0.0.1:5000/upload', { method:'POST', body: form });
+        const data = await resp.json();
+        extractedText = (data.extracted_text || '').trim();
+        resultBox.style.display = 'block';
+        resultBox.textContent = extractedText || '[No text found]';
+        status.textContent = extractedText ? '✅ Text extracted' : '✅ Uploaded — no text found';
+        downloadBtn.style.display = 'inline-block';
+        copyBtn.style.display = 'inline-block';
+      } catch (err) {
+        status.textContent = '❌ Error: ' + err.message;
+      } finally {
+        extractBtn.disabled = false;
+      }
+    });
+
+    downloadBtn.addEventListener('click', () => {
+      if (!extractedText) return;
+      const blob = new Blob([extractedText], { type:'text/plain' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'extracted_text.txt';
+      link.click();
+    });
+
+    copyBtn.addEventListener('click', async () => {
+      if (!extractedText) return;
+      await navigator.clipboard.writeText(extractedText);
+      copyBtn.textContent = 'Copied!';
+      setTimeout(() => { copyBtn.textContent = 'Copy Text'; }, 1500);
+    });
+  </script>
+</body>
+</html>
